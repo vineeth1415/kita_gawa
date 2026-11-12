@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "356006316329",
+    "project_id": "kitagawa-inventory-app",
+    "storage_bucket": "kitagawa-inventory-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:356006316329:android:6ee61b01ec5dc4de9bcf38",
+        "android_client_info": {
+          "package_name": "com.kitagawa.inventory_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDqHP62H-7Vv4xJRFK3WIzWIhnhZF_daKk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

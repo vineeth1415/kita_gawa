@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Native launch screen, shown while the process starts and replaced the
+     moment Flutter draws its first frame (the matching SplashScreen widget).
+     Both are the logo centred on white, so the handover is invisible.
+     White specifically: the logo asset is an opaque-background JPEG. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@android:color/white" />
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/splash_logo" />
+    </item>
+</layer-list>

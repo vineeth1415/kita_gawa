@@ -1,0 +1,214 @@
+rules_version = '2';
+
+// Kitagawa Inventory — role-based access control.
+//
+// Roles live in users/{uid}.role rather than in custom auth claims: custom
+// claims can only be set with the Admin SDK, which needs Cloud Functions and
+// therefore the Blaze plan. This project runs on Spark, so every rule below
+// resolves the caller's role with a get() on their user document.
+//
+// Two limitations are deliberate and documented rather than papered over:
+//
+//   1. Rules cannot verify that an items.currentStock update arrived together
+//      with a matching movements document — rules see one document at a time
+//      and cannot inspect the other writes in a transaction. The client's
+//      MovementRepository transaction is what guarantees that pairing. Rules
+//      still cap the damage: operational roles may touch ONLY currentStock and
+//      updatedAt, never the item's identity or its history.
+//
+// Roles: 'admin' (items, users, reports), 'sales' (read-only), 'store' (two
+// logins share it: select the working day, record inward/outward, close the
+// day) and the optional 'auditor', which only works while audit is enabled.
+//   2. Anyone holding the APK can call createUserWithEmailAndPassword and get
+//      a bare auth account. Without a users/{uid} document such an account has
+//      no role, and every rule here denies it, so it can neither read nor
+//      write anything. Blocking the signup itself would need Blaze + Functions.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- identity helpers -------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    // An account is only "active" once an admin has provisioned its user
+    // document and has not deactivated it. This is the gate a bare
+    // self-registered auth account fails.
+    function isActive() {
+      return signedIn()
+        && exists(userPath())
+        && get(userPath()).data.active == true;
+    }
+
+    function role() {
+      return get(userPath()).data.role;
+    }
+
+    function hasRole(r) {
+      return isActive() && role() == r;
+    }
+
+    function isAdmin() {
+      return hasRole('admin');
+    }
+
+    // ---- domain helpers ---------------------------------------------------
+
+    function auditEnabled() {
+      return exists(/databases/$(database)/documents/settings/app)
+        && get(/databases/$(database)/documents/settings/app).data.auditEnabled == true;
+    }
+
+    function shiftIsOpen(businessDate) {
+      return exists(/databases/$(database)/documents/shifts/$(businessDate))
+        && get(/databases/$(database)/documents/shifts/$(businessDate)).data.status == 'open';
+    }
+
+    // Reference number: alphanumeric, 4-16 characters. The client uppercases
+    // before writing, so the stored form is always upper case. Re-validated
+    // here because client-side validation is a convenience, not a control.
+    function validReference(value) {
+      return value is string && value.matches('^[A-Z0-9]{4,16}$');
+    }
+
+    function isBusinessDate(value) {
+      return value is string && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    // ---- users ------------------------------------------------------------
+
+    match /users/{uid} {
+      // A user may read their own record so the app can resolve their role at
+      // login; only an admin sees the full roster.
+      allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---- app settings (audit toggle) --------------------------------------
+
+    match /settings/{docId} {
+      allow read: if isActive();
+      allow write: if isAdmin();
+    }
+
+    // The shared "which date is the store working on" pointer. Store staff
+    // set it when they select the day and clear it when they close it; it is
+    // the one document every device watches to agree on the current day.
+    match /settings/workingDay {
+      allow read: if isActive();
+      allow write: if hasRole('store') || isAdmin();
+    }
+
+    // ---- items ------------------------------------------------------------
+
+    match /items/{itemId} {
+      allow read: if isActive();
+
+      // Only an admin defines items (code, name, description).
+      allow create, delete: if isAdmin();
+
+      allow update: if isAdmin()
+        || (
+          isActive()
+          && request.resource.data.diff(resource.data)
+               .affectedKeys().hasOnly(['currentStock', 'updatedAt'])
+          && request.resource.data.currentStock is int
+          && request.resource.data.currentStock >= 0
+        );
+    }
+
+    // ---- stock movements --------------------------------------------------
+
+    match /movements/{movementId} {
+      allow read: if isActive();
+
+      allow create: if isActive()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.delta is int
+        && request.resource.data.delta != 0
+        && request.resource.data.resultingStock is int
+        && request.resource.data.resultingStock >= 0
+        && validReference(request.resource.data.referenceNumber)
+        && isBusinessDate(request.resource.data.businessDate)
+        && (
+          // Store staff move stock in both directions, but only against a
+          // working day they have selected and not yet closed. The sign of
+          // the delta must agree with the declared direction.
+          (
+            hasRole('store')
+            && shiftIsOpen(request.resource.data.businessDate)
+            && (
+              (
+                request.resource.data.type == 'inward'
+                && request.resource.data.delta > 0
+              )
+              || (
+                request.resource.data.type == 'dispatch'
+                && request.resource.data.delta < 0
+              )
+            )
+          )
+          // Auditors correct stock only while the feature is switched on.
+          || (
+            hasRole('auditor')
+            && request.resource.data.type == 'audit_adjustment'
+            && auditEnabled()
+          )
+          || isAdmin()
+        );
+
+      // The audit trail is append-only. Nothing may rewrite history.
+      allow update, delete: if false;
+    }
+
+    // ---- shifts (one per business date, id == the date) --------------------
+
+    match /shifts/{businessDate} {
+      allow read: if isActive();
+      allow create, update: if hasRole('store') || isAdmin();
+      allow delete: if false;
+    }
+
+    // ---- closing reports ---------------------------------------------------
+
+    match /shiftReports/{businessDate} {
+      allow read: if isActive();
+      allow create: if hasRole('store') || isAdmin();
+      // A sealed report is permanent — that is the whole point of generating
+      // it "for future reference".
+      allow update, delete: if false;
+
+      match /lines/{lineId} {
+        allow read: if isActive();
+        allow create: if hasRole('store') || isAdmin();
+        allow update, delete: if false;
+      }
+    }
+
+    // ---- audit sessions ----------------------------------------------------
+
+    match /auditSessions/{sessionId} {
+      allow read: if isActive();
+      allow create, update: if (hasRole('auditor') && auditEnabled()) || isAdmin();
+      allow delete: if false;
+
+      match /counts/{itemId} {
+        allow read: if isActive();
+        allow create, update: if (hasRole('auditor') && auditEnabled()) || isAdmin();
+        allow delete: if false;
+      }
+    }
+
+    // Anything not matched above is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

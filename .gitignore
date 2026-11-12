@@ -1,0 +1,64 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Security-rules test harness dependencies
+tool/rules-test/node_modules/
+
+# Release signing. android/.gitignore already covers key.properties and *.jks
+# inside the Android project; these catch a keystore dropped anywhere else.
+# The upload keystore is the one artefact here that cannot be regenerated —
+# losing it means every tester has to uninstall and reinstall. Back it up off
+# this machine, never in the repo.
+*.jks
+*.keystore
+
+# CI service-account credentials, if one is ever written locally for testing.
+service-account.json
+
+# Firebase config. google-services.json holds no secrets (a Firebase API key
+# identifies the project, it does not authorise access — firestore.rules does
+# that), so commit it if the repo is private. Ignore it if the repo is public.
+# .firebase/

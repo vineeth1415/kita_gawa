@@ -1,0 +1,37 @@
+name: inventory_app
+description: "Kitagawa India — multi-role stock movement and inventory app."
+publish_to: 'none'
+
+version: 1.1.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # Firebase — Firestore is the primary datastore, shared across all devices.
+  firebase_core: ^4.14.0
+  firebase_auth: ^6.6.1
+  cloud_firestore: ^6.9.0
+
+  provider: ^6.1.2
+  intl: ^0.19.0
+  csv: ^6.0.0
+  share_plus: ^10.0.0
+  path_provider: ^2.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  fake_cloud_firestore: ^4.2.0
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/logo.jpeg
