@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -51,6 +48,15 @@ class DefaultFirebaseOptions {
         );
     }
   }
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyDlHSqCpkjz7k-3Sb2yy8KeKmd2wWJ_bqs',
+    appId: '1:356006316329:web:09ab2a9cd172003b9bcf38',
+    messagingSenderId: '356006316329',
+    projectId: 'kitagawa-inventory-app',
+    authDomain: 'kitagawa-inventory-app.firebaseapp.com',
+    storageBucket: 'kitagawa-inventory-app.firebasestorage.app',
+  );
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDqHP62H-7Vv4xJRFK3WIzWIhnhZF_daKk',
