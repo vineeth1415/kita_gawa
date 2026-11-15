@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import '../firebase_options.dart';
 import '../models/app_user.dart';
 import '../repositories/user_repository.dart';
+import '../utils/firebase_emulator.dart';
 import 'auth_service.dart';
 
 /// Creates staff accounts from inside the app.
@@ -39,6 +40,7 @@ class UserAdminService {
 
     final secondaryApp = await _openSecondaryApp();
     try {
+      await configureFirebaseEmulators(app: secondaryApp);
       final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
       final credential = await secondaryAuth.createUserWithEmailAndPassword(
         email: AuthService.emailForUsername(normalizedUsername),
