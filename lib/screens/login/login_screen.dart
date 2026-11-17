@@ -48,6 +48,26 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  void _showForgotPasswordDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Forgot Password?'),
+        content: const Text(
+          'Please contact your Administrator to reset your password.\n\n'
+          'The Administrator can reset your password directly from the '
+          'Admin > Users screen using your username.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final signingIn = context.watch<SessionProvider>().signingIn;
@@ -150,7 +170,12 @@ class _LoginScreenState extends State<LoginScreen> {
                             )
                           : const Text('Sign In'),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: () => _showForgotPasswordDialog(context),
+                      child: const Text('Forgot password?'),
+                    ),
+                    const SizedBox(height: 8),
                     const Text(
                       'Ask your administrator for an account.',
                       textAlign: TextAlign.center,

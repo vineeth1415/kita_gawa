@@ -1,4 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
+import '../repositories/collections.dart';
 
 /// Username-based sign-in on top of Firebase's email/password provider.
 ///
@@ -29,9 +32,27 @@ class AuthService {
   Future<UserCredential> signIn({
     required String username,
     required String password,
-  }) {
+  }) async {
+    final normalized = username.trim().toLowerCase();
+    String email = emailForUsername(normalized);
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection(Collections.usernames)
+          .doc(normalized)
+          .get();
+      if (doc.exists) {
+        final mappedEmail = doc.data()?['email'] as String?;
+        if (mappedEmail != null && mappedEmail.isNotEmpty) {
+          email = mappedEmail;
+        }
+      }
+    } catch (_) {
+      // Fall back to default email if document not yet created
+    }
+
     return _auth.signInWithEmailAndPassword(
-      email: emailForUsername(username),
+      email: email,
       password: password,
     );
   }

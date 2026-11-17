@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/app_user.dart';
 import '../../providers/session_provider.dart';
 import '../../repositories/user_repository.dart';
+import '../../services/user_admin_service.dart';
 import '../../utils/constants.dart';
 import '../../widgets/app_scaffold.dart';
 import '../../widgets/empty_state.dart';
@@ -20,6 +21,13 @@ class UsersScreen extends StatelessWidget {
 
     return AppScaffold(
       title: 'Users',
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.lock_reset),
+          tooltip: 'Reset user password',
+          onPressed: () => _openResetDialog(context, actingAdminUid: currentUid),
+        ),
+      ],
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.of(
           context,
@@ -59,6 +67,32 @@ class UsersScreen extends StatelessWidget {
         },
       ),
     );
+  }
+
+  static Future<void> _openResetDialog(
+    BuildContext context, {
+    String? initialUsername,
+    required String? actingAdminUid,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => ResetPasswordDialog(
+        initialUsername: initialUsername,
+        actingAdminUid: actingAdminUid,
+      ),
+    );
+    if (result == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            initialUsername != null
+                ? 'Password for $initialUsername reset successfully.'
+                : 'Password reset successfully.',
+          ),
+          backgroundColor: AppColors.inward,
+        ),
+      );
+    }
   }
 }
 
@@ -189,8 +223,24 @@ class _UserRowState extends State<_UserRow> {
         '${user.username} · ${user.role.label}'
         '${user.active ? '' : ' · deactivated${_deactivatedOn(user)}'}',
       ),
-      trailing: _busy
-          ? const SizedBox(
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.lock_reset, color: AppColors.brandBlue),
+            tooltip: widget.isSelf
+                ? 'Use Account > Change Password to update your own password'
+                : 'Reset ${user.displayName}\'s password',
+            onPressed: widget.isSelf
+                ? null
+                : () => UsersScreen._openResetDialog(
+                      context,
+                      initialUsername: user.username,
+                      actingAdminUid: widget.actingUid,
+                    ),
+          ),
+          if (_busy)
+            const SizedBox(
               width: AppSizes.minTapTarget,
               height: 24,
               child: Center(
@@ -201,10 +251,13 @@ class _UserRowState extends State<_UserRow> {
                 ),
               ),
             )
-          : Switch(
+          else
+            Switch(
               value: user.active,
               onChanged: widget.isSelf ? null : _setActive,
             ),
+        ],
+      ),
     );
   }
 
@@ -230,4 +283,209 @@ class _UserRowState extends State<_UserRow> {
     UserRole.store => AppColors.inward,
     UserRole.auditor => AppColors.audit,
   };
+}
+
+class ResetPasswordDialog extends StatefulWidget {
+  final String? initialUsername;
+  final String? actingAdminUid;
+
+  const ResetPasswordDialog({
+    super.key,
+    this.initialUsername,
+    required this.actingAdminUid,
+  });
+
+  @override
+  State<ResetPasswordDialog> createState() => _ResetPasswordDialogState();
+}
+
+class _ResetPasswordDialogState extends State<ResetPasswordDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _usernameController;
+  final _passwordController = TextEditingController();
+  final _confirmController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _usernameController = TextEditingController(
+      text: widget.initialUsername ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+    _confirmController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    final actingUid = widget.actingAdminUid;
+    if (actingUid == null) {
+      setState(() => _error = 'Admin session not found. Please log in again.');
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+
+    try {
+      final userAdmin = UserAdminService();
+      await userAdmin.resetStaffPassword(
+        username: _usernameController.text,
+        newPassword: _passwordController.text,
+        actingAdminUid: actingUid,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lockedUsername =
+        widget.initialUsername != null && widget.initialUsername!.isNotEmpty;
+
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.lock_reset, color: AppColors.brandBlue),
+          SizedBox(width: 8),
+          Flexible(child: Text('Reset Password')),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_error != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.dispatch.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.dispatch.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(
+                      color: AppColors.dispatch,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+              TextFormField(
+                controller: _usernameController,
+                readOnly: lockedUsername,
+                textInputAction: TextInputAction.next,
+                decoration: InputDecoration(
+                  labelText: 'Username',
+                  prefixIcon: const Icon(Icons.person_outline),
+                  filled: lockedUsername,
+                ),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return 'Username is required';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                textInputAction: TextInputAction.next,
+                decoration: InputDecoration(
+                  labelText: 'New Password',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
+                  ),
+                ),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Password is required';
+                  if (v.length < 6) return 'At least 6 characters required';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _confirmController,
+                obscureText: _obscureConfirm,
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => _submit(),
+                decoration: InputDecoration(
+                  labelText: 'Confirm Password',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscureConfirm
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscureConfirm = !_obscureConfirm),
+                  ),
+                ),
+                validator: (v) {
+                  if (v != _passwordController.text) {
+                    return 'Passwords do not match';
+                  }
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _submitting ? null : _submit,
+          child: _submitting
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Reset Password'),
+        ),
+      ],
+    );
+  }
 }

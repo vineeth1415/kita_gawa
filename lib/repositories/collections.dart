@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// between repositories and firestore.rules.
 class Collections {
   static const String users = 'users';
+  static const String usernames = 'usernames';
   static const String items = 'items';
   static const String movements = 'movements';
   static const String shifts = 'shifts';

@@ -38,10 +38,85 @@ class UserRepository {
 
   Future<bool> usernameExists(String username) async {
     final snap = await _users
-        .where('username', isEqualTo: username.toLowerCase())
+        .where('username', isEqualTo: username.toLowerCase().trim())
         .limit(1)
         .get();
     return snap.docs.isNotEmpty;
+  }
+
+  Future<AppUser?> fetchByUsername(String username) async {
+    final snap = await _users
+        .where('username', isEqualTo: username.toLowerCase().trim())
+        .limit(1)
+        .get();
+    if (snap.docs.isEmpty) return null;
+    return AppUser.fromFirestore(snap.docs.first);
+  }
+
+  Future<Map<String, dynamic>?> fetchUsernameMapping(String username) async {
+    final doc = await _db
+        .collection(Collections.usernames)
+        .doc(username.toLowerCase().trim())
+        .get();
+    if (!doc.exists) return null;
+    return doc.data();
+  }
+
+  Future<void> setUsernameMapping({
+    required String username,
+    required String uid,
+    required String email,
+    required int authVersion,
+  }) {
+    return _db
+        .collection(Collections.usernames)
+        .doc(username.toLowerCase().trim())
+        .set({
+      'uid': uid,
+      'email': email,
+      'authVersion': authVersion,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> migrateProfileOnReset({
+    required String oldUid,
+    required String newUid,
+    required String username,
+    required String displayName,
+    required UserRole role,
+    required String authEmail,
+    required int authVersion,
+    required String createdBy,
+  }) async {
+    final normalized = username.toLowerCase().trim();
+    final batch = _db.batch();
+
+    final newProfileDoc = _users.doc(newUid);
+    batch.set(newProfileDoc, {
+      'username': normalized,
+      'displayName': displayName.trim(),
+      'role': role.wireName,
+      'active': true,
+      'authEmail': authEmail,
+      'authVersion': authVersion,
+      'createdAt': FieldValue.serverTimestamp(),
+      'createdBy': createdBy,
+    });
+
+    final usernameDoc = _db.collection(Collections.usernames).doc(normalized);
+    batch.set(usernameDoc, {
+      'uid': newUid,
+      'email': authEmail,
+      'authVersion': authVersion,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    if (oldUid != newUid) {
+      batch.delete(_users.doc(oldUid));
+    }
+
+    await batch.commit();
   }
 
   /// Writes the profile that gives an auth account its role. Until this

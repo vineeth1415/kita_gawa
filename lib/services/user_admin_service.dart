@@ -57,6 +57,12 @@ class UserAdminService {
         role: role,
         createdBy: createdBy,
       );
+      await _users.setUsernameMapping(
+        username: normalizedUsername,
+        uid: uid,
+        email: AuthService.emailForUsername(normalizedUsername),
+        authVersion: 1,
+      );
 
       await secondaryAuth.signOut();
 
@@ -67,6 +73,57 @@ class UserAdminService {
         role: role,
         createdBy: createdBy,
       );
+    } finally {
+      await secondaryApp.delete();
+    }
+  }
+
+  /// Resets a staff member's password by creating a fresh auth credential
+  /// on a new versioned synthetic address and migrating their profile in Firestore.
+  ///
+  /// This allows an administrator to reset any user's password directly from
+  /// the app using only their username, without requiring an email inbox or
+  /// Firebase Blaze / Cloud Functions.
+  Future<void> resetStaffPassword({
+    required String username,
+    required String newPassword,
+    required String actingAdminUid,
+  }) async {
+    final normalizedUsername = username.trim().toLowerCase();
+
+    final user = await _users.fetchByUsername(normalizedUsername);
+    if (user == null) {
+      throw Exception('User "$normalizedUsername" does not exist.');
+    }
+
+    final mapping = await _users.fetchUsernameMapping(normalizedUsername);
+    final currentVersion = (mapping?['authVersion'] as int?) ?? 1;
+    final nextVersion = currentVersion + 1;
+    final newEmail =
+        '$normalizedUsername.v$nextVersion@${AuthService.usernameDomain}';
+
+    final secondaryApp = await _openSecondaryApp();
+    try {
+      await configureFirebaseEmulators(app: secondaryApp);
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+      final credential = await secondaryAuth.createUserWithEmailAndPassword(
+        email: newEmail,
+        password: newPassword,
+      );
+      final newUid = credential.user!.uid;
+
+      await _users.migrateProfileOnReset(
+        oldUid: user.uid,
+        newUid: newUid,
+        username: normalizedUsername,
+        displayName: user.displayName,
+        role: user.role,
+        authEmail: newEmail,
+        authVersion: nextVersion,
+        createdBy: actingAdminUid,
+      );
+
+      await secondaryAuth.signOut();
     } finally {
       await secondaryApp.delete();
     }
