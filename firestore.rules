@@ -91,6 +91,15 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ---- usernames mapping ------------------------------------------------
+    // Maps username to active auth email so operators can sign in even after
+    // an admin resets their password.
+    match /usernames/{username} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
     // ---- app settings (audit toggle) --------------------------------------
 
     match /settings/{docId} {
