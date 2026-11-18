@@ -164,4 +164,21 @@ class UserRepository {
   Future<void> setDisplayName({required String uid, required String name}) {
     return _users.doc(uid).update({'displayName': name.trim()});
   }
+
+  /// Permanently deletes a user profile and removes their username mapping.
+  ///
+  /// This permanently removes the account from the roster and revokes all
+  /// access under Firestore security rules. Ledger movements recorded by
+  /// this user remain untouched for audit history.
+  Future<void> deleteUser({
+    required String uid,
+    required String username,
+  }) async {
+    final batch = _db.batch();
+    batch.delete(_users.doc(uid));
+    batch.delete(
+      _db.collection(Collections.usernames).doc(username.toLowerCase().trim()),
+    );
+    await batch.commit();
+  }
 }

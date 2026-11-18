@@ -187,6 +187,73 @@ class _UserRowState extends State<_UserRow> {
     return confirmed == true;
   }
 
+  Future<void> _deleteUser() async {
+    final user = widget.user;
+    if (widget.isSelf) return;
+
+    if (!await _confirmPermanentDeletion(user)) return;
+
+    setState(() => _busy = true);
+    try {
+      await widget.repository.deleteUser(
+        uid: user.uid,
+        username: user.username,
+      );
+      if (!mounted) return;
+      _snack(
+        '${user.displayName} (${user.username}) has been permanently deleted',
+        AppColors.dispatch,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _snack(
+        'Could not delete ${user.displayName}. Check the connection and try again.',
+        AppColors.dispatch,
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<bool> _confirmPermanentDeletion(AppUser user) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppColors.dispatch),
+            const SizedBox(width: 8),
+            Flexible(child: Text('Delete ${user.displayName}?')),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to permanently delete this user account '
+          '("${user.username}")?\n\n'
+          '• They will lose all access to the app immediately.\n'
+          '• This account cannot be recovered or switched back on.\n'
+          '• All past movements and reports recorded by ${user.displayName} '
+          'remain safely in the ledger for historical auditing.\n\n'
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.dispatch,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
   void _snack(String message, Color background) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: background),
@@ -228,6 +295,7 @@ class _UserRowState extends State<_UserRow> {
         children: [
           IconButton(
             icon: const Icon(Icons.lock_reset, color: AppColors.brandBlue),
+            visualDensity: VisualDensity.compact,
             tooltip: widget.isSelf
                 ? 'Use Account > Change Password to update your own password'
                 : 'Reset ${user.displayName}\'s password',
@@ -251,11 +319,25 @@ class _UserRowState extends State<_UserRow> {
                 ),
               ),
             )
-          else
+          else ...[
             Switch(
               value: user.active,
               onChanged: widget.isSelf ? null : _setActive,
             ),
+            IconButton(
+              icon: Icon(
+                Icons.delete_outline,
+                color: widget.isSelf
+                    ? Colors.grey.withValues(alpha: 0.3)
+                    : AppColors.dispatch,
+              ),
+              visualDensity: VisualDensity.compact,
+              tooltip: widget.isSelf
+                  ? 'You cannot delete your own admin account'
+                  : 'Permanently delete ${user.displayName}',
+              onPressed: widget.isSelf ? null : _deleteUser,
+            ),
+          ],
         ],
       ),
     );
